@@ -1,6 +1,7 @@
 <script lang="ts">
   import Quill from './lib/Quill.svelte'
-  import { createPeer } from './lib/peer'
+  import Greet from './lib/Greet.svelte'
+  import { createPeer } from './lib/peer_rs'
 
   const peer1 = createPeer(1n)
   const peer2 = createPeer(2n)
@@ -24,7 +25,9 @@
 <main class="container">
   <h1>Welcome to Tauri!</h1>
 
-  <p>Click on the Tauri, Vite, and Svelte logos to learn more.</p>
+  <div class="row">
+    <Greet />
+  </div>
 
   <div class="row">
     <Quill origin="e1" doc={doc1} path={'description'} on:change={editor1} />
@@ -34,9 +37,9 @@
     <Quill origin="e2" doc={doc1} path={'description'} on:change={editor2} />
   </div>
 
-  <div class="row">
+  <!-- <div class="row">
     <Quill origin="e3" doc={doc2} path={'description'} on:change={editor3} />
-  </div>
+  </div> -->
 </main>
 
 <style>

@@ -5,7 +5,7 @@
   import Delta from 'quill-delta'
   import 'quill/dist/quill.core.css'
 
-  import type { HulyDoc, Origin, HulyDelta } from './peer'
+  import type { HulyDoc, Origin, HulyDelta } from './peer_rs'
 
   export let origin: Origin
   export let doc: HulyDoc
@@ -16,17 +16,17 @@
   onMount(() => {
     const text = doc.getText(path)
     text.subscribe((delta: HulyDelta) => {
-      if (delta.origin !== origin) quill.updateContents(delta.ops, 'api')
+      quill.updateContents(delta.ops, 'api')
     })
 
     const quill = new Quill(editor)
     quill.setContents(text.getContents())
     quill.on('text-change', (delta: Delta, _, source: EmitterSource) => {
-      if (source !== 'api') text.update({ docId: doc.docId, origin, ops: delta.ops })
+      if (source !== 'api') text.update(delta.ops)
     })
   })
 </script>
 
-<div style="height: 300px; width: 100%; border: #fff solid 1px">
+<div style="height: 240px; width: 100%; border: #fff solid 1px">
   <div bind:this={editor} />
 </div>
