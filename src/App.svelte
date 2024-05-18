@@ -1,13 +1,8 @@
 <script lang="ts">
   import Quill from './lib/Quill.svelte'
   import Greet from './lib/Greet.svelte'
-  import { createPeer } from './lib/peer_rs'
 
-  const peer1 = createPeer(1n)
-  const peer2 = createPeer(2n)
-
-  const doc1 = peer1.getDoc('x')
-  const doc2 = peer2.getDoc('x')
+  const doc1 = 'x'
 
   function editor1(event: CustomEvent) {
     console.log('editor1', event.detail)
@@ -30,11 +25,11 @@
   </div>
 
   <div class="row">
-    <Quill origin="e1" doc={doc1} path={'description'} on:change={editor1} />
+    <Quill origin="e1" docId={doc1} path={'description'} on:change={editor1} />
   </div>
 
   <div class="row">
-    <Quill origin="e2" doc={doc1} path={'description'} on:change={editor2} />
+    <Quill origin="e2" docId={doc1} path={'description'} on:change={editor2} />
   </div>
 
   <!-- <div class="row">

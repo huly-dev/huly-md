@@ -1,15 +1,49 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 
-import { Loro, type LoroEventBatch } from 'loro-crdt'
 import { Op } from 'quill-delta'
 
-listen('diff', (delta) => {
-  console.log('diff', delta)
+type OpsListener = (origin: string, ops: Op[]) => void
+
+const listeners = new Map<string, OpsListener[]>()
+
+const createCID = (docId: string, path: string) => `${docId}/${path}`
+
+export const addListener = (docId: string, path: string, listener: OpsListener) => {
+  const cid = createCID(docId, path)
+  const list = listeners.get(cid)
+  if (list) {
+    list.push(listener)
+  } else {
+    listeners.set(cid, [listener])
+  }
+}
+
+const removeListener = (docId: string, path: string, listener: OpsListener) => {
+  const cid = createCID(docId, path)
+  const list = listeners.get(cid)
+  if (list) {
+    const index = list.indexOf(listener)
+    if (index !== -1) {
+      list.splice(index, 1)
+    }
+  }
+}
+
+listen('doc-diff', (message) => {
+  console.log('doc-diff', message)
+  const { origin, docId, diff } = message.payload as HulyDocDiff
+  diff.forEach((d) => {
+    const cid = createCID(docId, d.id)
+    const list = listeners.get(cid)
+    console.log('broadcasting', cid)
+    if (list) {
+      list.forEach((listener) => listener(origin, d.diff))
+    }
+  })
 })
 
 type DocId = string
-export type Origin = string
 
 interface HulyPeer {
   readonly peerId: bigint
@@ -22,104 +56,54 @@ export interface HulyDoc {
   import(delta: Uint8Array): void
 }
 
-export interface HulyDelta {
+interface HulyDocDiff {
   readonly docId: DocId
-  readonly ops: Op[]
+  readonly origin: string
+  readonly diff: HulyTextDiff[]
+}
+
+interface HulyTextDiff {
+  id: string
+  type: string
+  diff: Op[]
 }
 
 interface HulyText {
-  getContents(): Op[]
-  update(ops: Op[]): Promise<void>
-  subscribe(listener: (delta: HulyDelta) => void): void
+  getContents(): Promise<Op[]>
+  update(origin: string, ops: Op[]): Promise<void>
+  subscribe(listener: OpsListener): void
 }
-
-// type RemoteDelta = {
-//   readonly docId: DocId
-//   readonly delta: Uint8Array
-// }
 
 // Tauri Commands
 
-const getTextValue = (docId: DocId, cid: string): Promise<object> =>
-  invoke('get_text_value', { docId, cid })
-const applyDelta = (docId: DocId, cid: string, origin: string, delta: Op[]): Promise<object> =>
-  invoke('apply_delta', { docId, cid, origin, delta })
-const subscribe = (docId: DocId, cid: string): Promise<number> =>
-  invoke('subscribe', { docId, cid })
+export const getTextValue = (docId: DocId, path: string): Promise<Op[]> =>
+  invoke('get_text_value', { docId, path })
+
+export const applyDelta = (
+  docId: DocId,
+  path: string,
+  origin: string,
+  delta: Op[],
+): Promise<void> => invoke('apply_delta', { docId, path, origin, delta })
 
 const after = { expand: 'after' as 'after' }
-let originSeq: number = 0
 
-function createDoc(peerId: bigint, docId: DocId) {
-  const doc = new Loro()
-  doc.setPeerId(peerId)
-  doc.configTextStyle({ bold: after, italic: after, list: after, indent: after, link: after })
-
+function createDoc(peerId: bigint, docId: DocId): HulyDoc {
   return {
     docId,
-    import(delta: Uint8Array) {
-      doc.import(delta)
-    },
-    getText(path: string): HulyText {
-      const origin = String(++originSeq)
-      const text = doc.getText(path)
-      const cid = `cid:root-${path}:Text`
-
+    import(delta: Uint8Array) {},
+    getText(cid: string): HulyText {
       return {
-        getContents() {
-          return text.toDelta()
-        },
-        async update(ops: Op[]) {
-          // const current = doc.version()
-          console.log('update', ops)
-          text.applyDelta(ops as any)
-
-          try {
-            const y = await applyDelta(docId, cid, origin, ops)
-            console.log('applyDelta', y)
-          } catch (e) {
-            console.error('applyDelta', e)
-          }
-
-          doc.commit(origin)
-          // const delta = doc.exportFrom(current)
-          // emitter.emit('delta', { docId, delta })
-        },
-        subscribe(listener: (delta: HulyDelta) => void) {
-          subscribe(docId, cid)
-          doc.subscribe((batch: LoroEventBatch) => {
-            console.log('lorobatch', batch)
-            if (batch.origin === origin) return
-            batch.events.forEach((event) => {
-              if (event.path[0] === path) {
-                const diff = event.diff
-                if (diff.type === 'text') listener({ docId, ops: diff.diff })
-              }
-            })
-          })
-        },
+        getContents: () => getTextValue(docId, cid),
+        update: (origin, ops: Op[]) => applyDelta(docId, cid, origin, ops),
+        subscribe: (listener: (origin: string, ops: Op[]) => void) =>
+          addListener(docId, cid, listener),
       }
     },
   }
 }
 
-export function createPeer(peerId: bigint): HulyPeer {
-  const docs = new Map<string, HulyDoc>()
-  // emitter.on('delta', (delta) => {
-  //   const doc = docs.get(delta.docId)
-  //   if (doc) doc.import(delta.delta)
-  // })
-  return {
-    peerId,
-    getDoc(docId: string): HulyDoc {
-      const doc = docs.get(docId)
-      if (doc) {
-        return doc
-      } else {
-        const newDoc = createDoc(peerId, docId)
-        docs.set(docId, newDoc)
-        return newDoc
-      }
-    },
-  }
-}
+export const createPeer = (peerId: bigint): HulyPeer => ({
+  peerId,
+  getDoc: (docId: string) => createDoc(peerId, docId),
+})
