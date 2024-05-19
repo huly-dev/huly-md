@@ -5,7 +5,8 @@ use generic_btree::rle::HasLength;
 use lazy_static::lazy_static;
 use loro_delta::DeltaItem;
 use loro_internal::{
-    container::ContainerID,
+    configure::{StyleConfig, StyleConfigMap},
+    container::{richtext::ExpandType, ContainerID},
     delta::{Meta, StyleMeta},
     event::{ContainerDiff, Diff, DiffEvent, DocDiff, TextDiffItem},
     handler::TextDelta,
@@ -128,6 +129,41 @@ fn hulyize_container_diff(value: &ContainerDiff) -> HulyContainerDiff {
     }
 }
 
+fn config_text_style() -> StyleConfigMap {
+    let mut style_config = StyleConfigMap::new();
+    style_config.insert(
+        "bold".into(),
+        StyleConfig {
+            expand: ExpandType::After,
+        },
+    );
+    style_config.insert(
+        "italic".into(),
+        StyleConfig {
+            expand: ExpandType::After,
+        },
+    );
+    style_config.insert(
+        "list".into(),
+        StyleConfig {
+            expand: ExpandType::After,
+        },
+    );
+    style_config.insert(
+        "indent".into(),
+        StyleConfig {
+            expand: ExpandType::After,
+        },
+    );
+    style_config.insert(
+        "link".into(),
+        StyleConfig {
+            expand: ExpandType::After,
+        },
+    );
+    style_config
+}
+
 fn get_doc(app_handle: Arc<AppHandle>, doc_id: &str) -> Arc<LoroDoc> {
     let mut docs = DOCS.lock().unwrap();
     match docs.get(doc_id) {
@@ -135,6 +171,8 @@ fn get_doc(app_handle: Arc<AppHandle>, doc_id: &str) -> Arc<LoroDoc> {
         None => {
             let doc = Arc::new(LoroDoc::new_auto_commit());
             let id = doc_id.to_string();
+
+            doc.config_text_style(config_text_style());
 
             let handler = {
                 let app_handle = Arc::clone(&app_handle);
